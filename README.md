@@ -10,6 +10,7 @@
   <a href="https://github.com/YildizDikme/zeyvola-screen-recorder/releases/download/v0.1.0/Zeyvola-0.1.0-macos-arm64.dmg"><img src="docs/readme/download-mac-arm64.svg" width="300" alt="Download Zeyvola 0.1.0 for Mac with Apple silicon (.dmg)"></a>
   <a href="https://github.com/YildizDikme/zeyvola-screen-recorder/releases/download/v0.1.0/Zeyvola-0.1.0-macos-x64.dmg"><img src="docs/readme/download-mac-intel.svg" width="300" alt="Download Zeyvola 0.1.0 for Mac with an Intel processor (.dmg)"></a>
   <a href="https://github.com/YildizDikme/zeyvola-screen-recorder/releases/download/v0.1.0/Zeyvola-0.1.0-windows-x64.zip"><img src="docs/readme/download-windows.svg" width="300" alt="Download Zeyvola 0.1.0 for Windows 10 and 11, 64-bit (.zip)"></a>
+  <a href="https://github.com/rozabay/zeyvola-screen-recorder/releases/download/v0.1.0-linux/Zeyvola-0.1.0-linux-x64.deb"><img src="docs/readme/download-linux.svg" width="300" alt="Download Zeyvola 0.1.0 for Linux, 64-bit (.deb)"></a>
 </p>
 
 <p align="center">
