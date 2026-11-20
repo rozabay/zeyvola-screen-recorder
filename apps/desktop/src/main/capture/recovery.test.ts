@@ -203,6 +203,45 @@ describe('recovery folders', () => {
   });
 });
 
+describe('Linux native helper (zeyvola-kayit)', () => {
+  const LINUX_META = { recordingId: 'rec_lin123456', backend: 'native-linux', target: { kind: 'display', label: 'HDMI-1', bounds: { x: 0, y: 0, w: 1920, h: 1080 }, scaleFactor: 1 } };
+  const head = { e: 'session', startedAtMs: Date.UTC(2026, 10, 18, 9, 0, 0), pid: 1234, cursor: 'cursor.jsonl', meta: LINUX_META };
+  const screen = { e: 'track', kind: 'screen', name: 'screen.webm', mime: 'video/webm', startOffsetMs: 0, width: 1920, height: 1080, fps: 30 };
+  const mic = { e: 'track', kind: 'mic', name: 'mic.webm', mime: 'audio/webm', startOffsetMs: 4, sampleRate: 48000, channels: 1 };
+  const system = { e: 'track', kind: 'system', name: 'system.webm', mime: 'audio/webm', startOffsetMs: 5, sampleRate: 48000, channels: 2 };
+  const probed: ProbedFile[] = [
+    { name: 'screen.webm', kind: 'video', durationMs: 20_000 },
+    { name: 'mic.webm', kind: 'audio', durationMs: 19_996 },
+    { name: 'system.webm', kind: 'audio', durationMs: 19_995 },
+  ];
+  const files = ['session.jsonl', 'screen.webm', 'mic.webm', 'system.webm', 'cursor.jsonl'];
+
+  it('writes native-linux into the recording and keeps the cursor out of the frames', () => {
+    const log = parseSessionLog(lines(head, screen, mic, system, { e: 'end', durationMs: 20_000 }))!;
+    expect(log.meta).toEqual(LINUX_META);
+    const r = rebuildRecording({ recordingId: 'rec_lin123456', log, probed, files, platform: 'linux-x64' })!;
+    expect(r.recording.capture).toMatchObject({ backend: 'native-linux', platform: 'linux-x64', cursorInFrames: false, hasClicks: true });
+    expect(r.recording.sources.screen?.file).toBe('media/rec_lin123456/screen.webm');
+    expect(r.recording.sources.system?.channels).toBe(2);
+    expect(r.cleanEnd).toBe(true);
+  });
+
+  it('names the Linux helper when the log has no description line', () => {
+    const log = parseSessionLog(lines({ e: 'session', v: 1 }, screen))!;
+    const r = rebuildRecording({ recordingId: 'rec_lin123456', log, probed, files: ['screen.webm'], platform: 'linux-arm64' })!;
+    expect(r.recording.capture.backend).toBe('native-linux');
+  });
+
+  it('still reads a macOS log on a Linux recovery pass (and the other way round)', () => {
+    const macLog = parseSessionLog(lines(HEADER, SCREEN, MIC))!;
+    const mac = rebuildRecording({ recordingId: 'rec_abcdef12', log: macLog, probed: PROBED, files: FILES, platform: 'darwin-arm64' })!;
+    expect(mac.recording.capture.backend).toBe('native-macos');
+    const winLog = parseSessionLog(lines({ ...HEADER, meta: { ...META, backend: 'native-windows' } }, SCREEN))!;
+    const win = rebuildRecording({ recordingId: 'rec_abcdef12', log: winLog, probed: PROBED, files: FILES, platform: 'win32-x64' })!;
+    expect(win.recording.capture.backend).toBe('native-windows');
+  });
+});
+
 describe('browser recording path (distribution B)', () => {
   const WEB_META = { recordingId: 'rec_web12345', backend: 'web', target: { kind: 'region', label: 'Bölge', bounds: { x: 40, y: 97, w: 1280, h: 800 }, scaleFactor: 2 }, crop: { x: 0.0265, y: 0.0988, w: 0.8466, h: 0.8147 } };
   const head = { e: 'session', startedAtMs: Date.UTC(2026, 9, 17, 11, 0, 0), pid: 999_999, cursor: 'cursor.jsonl', clicks: true, meta: WEB_META };

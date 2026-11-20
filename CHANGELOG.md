@@ -4,6 +4,41 @@ Bu dosya Zeyvola'nın sürümlerindeki önemli değişiklikleri listeler.
 
 *This file lists notable changes in each Zeyvola release.*
 
+## Yayımlanmamış — Linux desteği / Unreleased — Linux support
+
+Linux (Debian, Ubuntu, Pardus) eklendi: `.deb` paketi, X11 ve Wayland'de yerel kayıt, ayrı izler,
+tıklamadan otomatik zoom. macOS ve Windows davranışı değişmedi.
+
+*Linux (Debian, Ubuntu, Pardus) added: a `.deb` package, native recording on X11 and Wayland,
+separate tracks, click-driven zoom. macOS and Windows behaviour is unchanged.*
+
+- **Kayıt yardımcısı `zeyvola-kayit`** (GStreamer): ekran **imleç çizilmeden**, kamera, mikrofon ve
+  sistem sesi ayrı WebM dosyalarına, tek saatte. X11'de `ximagesrc`, Wayland'de
+  `xdg-desktop-portal ScreenCast` + `pipewiresrc`. Çökme sonrası kurtarma macOS'la aynı
+  `session.jsonl` biçimini kullanır. *Recording helper (GStreamer): the screen without the pointer,
+  camera, microphone and system sound to separate WebM files on one clock. X11 uses `ximagesrc`,
+  Wayland the ScreenCast portal. Crash recovery uses the same `session.jsonl` format as macOS.*
+- **İmleç yardımcısı `zeyvola-imlec`**: X11'de XInput2 ham olayları, Wayland'de RemoteDesktop
+  portalı + libei. Yalnız fare düğmeleri ve kaydırma; klavye hiç okunmaz. *Pointer helper: XInput2
+  raw events on X11, the RemoteDesktop portal and libei on Wayland; mouse buttons and scrolling
+  only, never the keyboard.*
+- **Ses yardımcısı `zeyvola-ses`**: sistem sesi (varsayılan çıkışın monitor kaynağı) ve içe
+  aktarılan videonun sesi (AAC → Opus, sistemin GStreamer'ıyla). *Sound helper: system audio and
+  imported videos' sound (AAC → Opus through the system's GStreamer).*
+- **`.deb` paketi**: `/usr/lib/zeyvola`, `/usr/bin/zeyvola`, masaüstü girdisi ve ikonlar;
+  `chrome-sandbox` setuid root, bağımlılıklar GStreamer/PipeWire dahil. *`.deb` package with the
+  desktop entry and icons; `chrome-sandbox` setuid root, GStreamer/PipeWire dependencies included.*
+- **Kod denetimi**: `tools/codec-audit.mjs` artık ELF ikililerini okur, Linux yardımcılarının
+  bağlandığı kitaplıkları listeler ve klavye okuma işaretlerini reddeder. *Codec audit now reads
+  ELF binaries, lists the libraries the Linux helpers link and rejects keyboard-reading symbols.*
+- **Dışa aktarma**: WebM (VP9 + Opus) her yerde; MP4 yalnız VA-API H.264 kodlayıcısı varsa, yoksa
+  uygulama bunu önceden söyleyip WebM yazar. *Export: WebM everywhere; MP4 only where VA-API
+  offers an H.264 encoder, otherwise the app says so and writes WebM.*
+- **Bilinen sınırlar**: Wayland'de global kısayol ve pencere geometrisi yok (tepsi menüsü, "tüm
+  ekran + kırpma"); duraklatma yalnız saati durdurur; `vah264enc` çoğu NVIDIA sisteminde yoktur.
+  *Known limits: no global shortcuts or window geometry on Wayland (tray menu, whole screen
+  cropped); pausing stops the clock only; `vah264enc` is absent on most NVIDIA systems.*
+
 ## 0.1.0 — 2026-11-13
 
 İlk sürüm. macOS (Apple Silicon ve Intel) ve Windows 10/11 x64. Windows'ta otomatik testler GitHub'ın Windows makinesinde geçti; uygulama gerçek bir Windows bilgisayarda kurulup kayıt yapılarak denendi. Her donanımda denenmedi.

@@ -9,6 +9,16 @@
   "licenseFirstLine": null,
   "recordedOn": "darwin-arm64"
  },
+ "@esbuild/linux-x64@0.28.2": {
+  "name": "@esbuild/linux-x64",
+  "version": "0.28.2",
+  "platform": "linux/x64",
+  "license": "MIT",
+  "licenseFile": null,
+  "licenseSha256": null,
+  "licenseFirstLine": null,
+  "recordedOn": "linux-x64"
+ },
  "@esbuild/win32-x64@0.28.2": {
   "name": "@esbuild/win32-x64",
   "version": "0.28.2",
@@ -29,6 +39,26 @@
   "licenseFirstLine": null,
   "recordedOn": "darwin-arm64"
  },
+ "@rolldown/binding-linux-x64-gnu@1.2.14": {
+  "name": "@rolldown/binding-linux-x64-gnu",
+  "version": "1.2.14",
+  "platform": "linux/x64",
+  "license": "MIT",
+  "licenseFile": null,
+  "licenseSha256": null,
+  "licenseFirstLine": null,
+  "recordedOn": "linux-x64"
+ },
+ "@rolldown/binding-linux-x64-musl@1.2.14": {
+  "name": "@rolldown/binding-linux-x64-musl",
+  "version": "1.2.14",
+  "platform": "linux/x64",
+  "license": "MIT",
+  "licenseFile": null,
+  "licenseSha256": null,
+  "licenseFirstLine": null,
+  "recordedOn": "linux-x64"
+ },
  "@rolldown/binding-win32-x64-msvc@1.2.14": {
   "name": "@rolldown/binding-win32-x64-msvc",
   "version": "1.2.14",
@@ -48,6 +78,16 @@
   "licenseSha256": "a5e9f9b1575301c7a7a03508fdaa2e05a918cc17fd21c6e898096a96d6a34f61",
   "licenseFirstLine": "Apache License",
   "recordedOn": "darwin-arm64"
+ },
+ "@typescript/typescript-linux-x64@7.0.2": {
+  "name": "@typescript/typescript-linux-x64",
+  "version": "7.0.2",
+  "platform": "linux/x64",
+  "license": "Apache-2.0",
+  "licenseFile": "LICENSE",
+  "licenseSha256": "a5e9f9b1575301c7a7a03508fdaa2e05a918cc17fd21c6e898096a96d6a34f61",
+  "licenseFirstLine": "Apache License",
+  "recordedOn": "linux-x64"
  },
  "@typescript/typescript-win32-x64@7.0.2": {
   "name": "@typescript/typescript-win32-x64",
@@ -78,6 +118,26 @@
   "licenseSha256": "5eba353fe5076ac3432177f8ab1cf75e3afcd0584251e37c3bfead5f447d040e",
   "licenseFirstLine": "Mozilla Public License Version 2.0",
   "recordedOn": "darwin-arm64"
+ },
+ "lightningcss-linux-x64-gnu@1.33.0": {
+  "name": "lightningcss-linux-x64-gnu",
+  "version": "1.33.0",
+  "platform": "linux/x64",
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
+  "licenseSha256": "5eba353fe5076ac3432177f8ab1cf75e3afcd0584251e37c3bfead5f447d040e",
+  "licenseFirstLine": "Mozilla Public License Version 2.0",
+  "recordedOn": "linux-x64"
+ },
+ "lightningcss-linux-x64-musl@1.33.0": {
+  "name": "lightningcss-linux-x64-musl",
+  "version": "1.33.0",
+  "platform": "linux/x64",
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
+  "licenseSha256": "5eba353fe5076ac3432177f8ab1cf75e3afcd0584251e37c3bfead5f447d040e",
+  "licenseFirstLine": "Mozilla Public License Version 2.0",
+  "recordedOn": "linux-x64"
  },
  "lightningcss-win32-x64-msvc@1.33.0": {
   "name": "lightningcss-win32-x64-msvc",

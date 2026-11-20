@@ -202,7 +202,54 @@ Structure:
 - `native/input-macos`: click helper (mouse buttons and scrolling; no codecs)
 - `native/recorder-macos`: macOS recording helper (ScreenCaptureKit; screen and camera as H.264 through macOS's encoder, sound as Opus)
 - `native/helper-windows`: Windows helper (clicks, imported audio, Media Foundation MP4)
+- `native/imlec-linux`: Linux click/pointer helper (X11 XInput2; Wayland through xdg-desktop-portal RemoteDesktop)
+- `native/ses-linux`: Linux sound helper (system audio, imported video audio; GStreamer, Opus in WebM)
+- `native/kayit-linux`: Linux recording helper (GStreamer; screen without the pointer, camera, microphone, system sound, each to its own WebM file)
+- `native/ortak`: the line protocol header the Linux helpers share
 - `tools/`: license notices, codec audit, FFmpeg source package
+
+</details>
+
+<details><summary><b>Linux</b></summary>
+
+**Linux is built from source and packaged as a `.deb`** (Debian, Ubuntu, Pardus). There is no
+prebuilt download yet.
+
+```bash
+sudo apt install libxi-dev libx11-dev libxext-dev libxfixes-dev \
+  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libpipewire-0.3-dev \
+  libei-dev libopus-dev libvpx-dev libdbus-1-dev libglib2.0-dev libsecret-1-dev \
+  gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pipewire
+nvm use && pnpm install
+pnpm --filter @zeyvola/desktop exec node node_modules/electron/install.js
+pnpm native:linux          # the three helpers
+pnpm build
+node apps/desktop/scripts/package.mjs --platform linux --arch x64 --skip-build
+sudo apt install ./apps/desktop/out/mp4/Zeyvola-0.1.0-linux-x64.deb
+```
+
+Recording on Linux:
+
+- **X11**: full support. The screen is recorded without the pointer; the pointer and clicks are a
+  separate log, so automatic zoom works like on macOS.
+- **Wayland**: the screen comes through **xdg-desktop-portal ScreenCast**, which needs a window to
+  belong to. A separate helper process has none, so on Wayland the app records through Chromium's
+  own portal call: the desktop's dialog asks what to share, and recording works. The cost is that
+  the **pointer stays part of the video** (no separate cursor track, no automatic zoom), global
+  shortcuts do not work (the tray menu is used), and window recordings become "the whole screen".
+  The source list shows the displays instead of asking the portal twice; the real choice happens
+  in the sharing dialog when recording starts.
+- **System sound** is the default output's monitor source (PipeWire or PulseAudio).
+- **Export**: WebM (VP9 + Opus) everywhere. MP4 needs a hardware H.264 encoder (VA-API,
+  `vah264enc`); without one the app says so and writes WebM instead.
+- The three helpers are compiled from `native/imlec-linux`, `native/ses-linux` and
+  `native/kayit-linux`; their READMEs describe the protocol, what each one may link and what it
+  must never do (no keyboard, no network).
+
+Known limits: pausing stops the recording clock but the encoders keep running; `vah264enc` is
+absent on most NVIDIA systems; the `.deb` sets `chrome-sandbox` setuid root in its staging folder
+(needed by Chromium's sandbox), so the project tree's own file system need not support setuid.
+See [docs/linux-deneme-listesi.md](docs/linux-deneme-listesi.md) for the manual test list.
 
 </details>
 
@@ -392,7 +439,54 @@ Yapı:
 - `native/input-macos`: tıklama yardımcısı (fare tuşları ve kaydırma; codec içermez)
 - `native/recorder-macos`: macOS kayıt yardımcısı (ScreenCaptureKit; ekranı ve kamerayı macOS'un kodlayıcısıyla H.264, sesi Opus olarak yazar)
 - `native/helper-windows`: Windows yardımcısı (tıklamalar, eklenen videonun sesi, Media Foundation ile MP4)
+- `native/imlec-linux`: Linux imleç/tıklama yardımcısı (X11 XInput2; Wayland'de xdg-desktop-portal RemoteDesktop)
+- `native/ses-linux`: Linux ses yardımcısı (sistem sesi, eklenen videonun sesi; GStreamer, WebM içinde Opus)
+- `native/kayit-linux`: Linux kayıt yardımcısı (GStreamer; ekran imleçsiz, kamera, mikrofon, sistem sesi — her biri kendi WebM dosyasına)
+- `native/ortak`: Linux yardımcılarının paylaştığı satır protokolü başlığı
 - `tools/`: lisans bildirimleri, codec denetimi, FFmpeg kaynak paketi
+
+</details>
+
+<details><summary><b>Linux</b></summary>
+
+**Linux kaynaktan derlenir ve `.deb` olarak paketlenir** (Debian, Ubuntu, Pardus). Hazır indirme
+henüz yok.
+
+```bash
+sudo apt install libxi-dev libx11-dev libxext-dev libxfixes-dev \
+  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libpipewire-0.3-dev \
+  libei-dev libopus-dev libvpx-dev libdbus-1-dev libglib2.0-dev libsecret-1-dev \
+  gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pipewire
+nvm use && pnpm install
+pnpm --filter @zeyvola/desktop exec node node_modules/electron/install.js
+pnpm native:linux          # üç yardımcı
+pnpm build
+node apps/desktop/scripts/package.mjs --platform linux --arch x64 --skip-build
+sudo apt install ./apps/desktop/out/mp4/Zeyvola-0.1.0-linux-x64.deb
+```
+
+Linux'ta kayıt:
+
+- **X11**: tam destek. Ekran, **imleç çizilmeden** kaydedilir; imleç ve tıklamalar ayrı günlüğe
+  yazılır, otomatik zoom macOS'taki gibi çalışır.
+- **Wayland**: ekran **xdg-desktop-portal ScreenCast** üzerinden gelir; portal diyaloğu bir
+  pencereye bağlı olmak zorundadır ve ayrı bir yardımcı sürecin penceresi yoktur. Bu yüzden
+  Wayland'de kayıt **Chromium'un kendi portal çağrısıyla** yapılır: masaüstünün paylaşım penceresi
+  açılır, neyi paylaşacağını seçersin, kayıt çalışır. Bedeli: **imleç videonun içinde kalır** (ayrı
+  imleç izi ve otomatik zoom yok), global kısayollar çalışmaz (tepsi menüsü kullanılır) ve pencere
+  kaydı "tüm ekran"a düşer. Kaynak listesi portalı iki kez sormamak için ekranları gösterir; gerçek
+  seçim kayıt başlarken paylaşım penceresinde yapılır.
+- **Sistem sesi**: varsayılan çıkışın monitor kaynağı (PipeWire veya PulseAudio).
+- **Dışa aktarma**: her yerde WebM (VP9 + Opus). MP4 için donanım H.264 kodlayıcısı gerekir
+  (VA-API, `vah264enc`); yoksa uygulama bunu söyleyip WebM yazar.
+- Üç yardımcı `native/imlec-linux`, `native/ses-linux` ve `native/kayit-linux` altında derlenir;
+  README'leri protokolü, neye bağlanabileceklerini ve asla yapmamaları gerekeni anlatır (klavye
+  yok, ağ yok).
+
+Bilinen sınırlar: duraklatma kayıt saatini durdurur ama kodlayıcılar çalışmaya devam eder;
+`vah264enc` çoğu NVIDIA sisteminde yoktur; `.deb`, Chromium sandbox'ı için gereken `chrome-sandbox`
+setuid bitini kendi hazırlık klasöründe ayarlar (proje ağacının dosya sistemi setuid desteklemek
+zorunda değildir). Elle deneme listesi: [docs/linux-deneme-listesi.md](docs/linux-deneme-listesi.md).
 
 </details>
 

@@ -10,9 +10,9 @@ import { trackSpan } from '../../shared/track-start';
 import type { BackendInfo } from '@zeyvola/protocol';
 import { removeQuiet } from '../fsutil';
 import { tm } from '../settings';
-import { BoundsTimeline, CursorTracker } from './cursor-tracker';
-import { InputHelper, inputHelperArgs, inputHelperAvailable, inputHelperPath, windowIdOf, type PointerEvent, type WindowBoundsEvent } from './input-helper';
+import { BoundsTimeline, CursorTracker } from './cursor-tracker';import { InputHelper, inputHelperArgs, inputHelperAvailable, inputHelperPath, windowIdOf, type PointerEvent, type WindowBoundsEvent } from './input-helper';
 import { SESSION_FILE } from './recovery';
+import { waylandSession } from './session-type';
 import { nowMs, SessionClock } from './session-clock';
 import type { BackendResult, BackendStartArgs, CaptureBackend } from './types';
 
@@ -53,6 +53,8 @@ export class WebCaptureBackend extends EventEmitter implements CaptureBackend {
   readonly info: BackendInfo = {
     id: 'web',
     available: true,
+    // System audio: Electron's loopback exists on Windows only. Linux records it through the
+    // native helper (kayit-linux); this browser path cannot, so the UI offers the native backend.
     capabilities: { separateCursor: false, clicks: inputHelperAvailable(), systemAudio: process.platform === 'win32', pause: true },
   };
 
@@ -102,15 +104,32 @@ export class WebCaptureBackend extends EventEmitter implements CaptureBackend {
     this.args = args;
     this.markers = [];
     await this.startInput(args);
-    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } });
-    const src = sources.find((s) => s.id === args.config.target.sourceId);
-    if (!src) throw new Error(tm("Seçilen kaynak artık mevcut değil."));
     const win = this.createWindow();
     this.win = win;
     const loopback = args.config.systemAudio && process.platform === 'win32';
-    win.webContents.session.setDisplayMediaRequestHandler((_req, cb) => {
-      cb(loopback ? { video: src, audio: 'loopback' } : { video: src });
-    });
+    if (waylandSession()) {
+      // Wayland: the desktop's own share dialog opens inside desktopCapturer.getSources() — that is
+      // the portal's picker, and it is what Discord and other Electron apps rely on. It is called
+      // here (not when the screen was opened) so the user picks exactly once, when recording
+      // starts, and the choice is theirs: the id in the config cannot select anything on Wayland.
+      win.webContents.session.setDisplayMediaRequestHandler(async (_req, cb) => {
+        try {
+          const list = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } });
+          const chosen = list[0];
+          if (!chosen) { cb(null); return; }
+          cb(loopback ? { video: chosen, audio: 'loopback' } : { video: chosen });
+        } catch {
+          cb(null);
+        }
+      });
+    } else {
+      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } });
+      const src = sources.find((s) => s.id === args.config.target.sourceId);
+      if (!src) throw new Error(tm("Seçilen kaynak artık mevcut değil."));
+      win.webContents.session.setDisplayMediaRequestHandler((_req, cb) => {
+        cb(loopback ? { video: src, audio: 'loopback' } : { video: src });
+      });
+    }
     await new Promise<void>((res) => win.webContents.once('did-finish-load', () => res()));
     const ready = new Promise<void>((resolve, reject) => { this.readyWaiter = { resolve, reject }; });
     win.webContents.send('cw:prepare', {

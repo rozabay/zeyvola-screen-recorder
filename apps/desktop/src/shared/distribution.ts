@@ -52,7 +52,7 @@ export interface DistributionProfile {
   /** MediaRecorder types for the Chromium recording path, in order. Royalty-free only in both profiles. */
   recorderVideo: readonly string[];
   recorderAudio: readonly string[];
-  /** The macOS recording helper ships (it encodes H.264 with VideoToolbox). */
+  /** A native recording helper ships with this build (macOS: ScreenCaptureKit; Linux: GStreamer). */
   nativeRecorder: boolean;
 }
 

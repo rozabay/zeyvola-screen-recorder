@@ -226,7 +226,7 @@ export function renderMarkdown(data, { packaged = false } = {}) {
   L.push('Electron\'s `LICENSES.chromium.html` does not cover the components below; their licenses follow.');
   L.push('');
   for (const r of data.supplements) {
-    L.push(`### ${r.name} (${r.platforms.map((p) => (p === 'darwin' ? 'macOS' : 'Windows')).join(', ')})`);
+    L.push(`### ${r.name} (${r.platforms.map((p) => (p === 'darwin' ? 'macOS' : p === 'linux' ? 'Linux' : 'Windows')).join(', ')})`);
     L.push('');
     L.push(`Sürüm / Version: ${r.version} · Lisans / License: ${r.license} · Kaynak / Source: ${r.source}`);
     L.push('');

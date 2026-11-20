@@ -45,6 +45,8 @@ function helper(): { path: string; out: string; mime: string } | null {
   const bin = (name: string, dev: string) => (app.isPackaged ? join(process.resourcesPath, 'bin', name) : resolve(app.getAppPath(), '..', '..', 'native', dev, 'bin', name));
   if (process.platform === 'darwin') return { path: bin('zeyvola-audio', 'audio-macos'), out: 'sound.m4a', mime: 'audio/mp4' };
   if (process.platform === 'win32') return { path: bin('zeyvola-win.exe', 'helper-windows'), out: 'sound.wav', mime: 'audio/wav' };
+  // Linux: GStreamer (system codecs) writes Opus in WebM, the container the app plays natively.
+  if (process.platform === 'linux') return { path: bin('zeyvola-ses', 'ses-linux'), out: 'sound.webm', mime: 'audio/webm' };
   return null;
 }
 

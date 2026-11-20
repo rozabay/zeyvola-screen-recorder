@@ -579,7 +579,11 @@ function updateRecordingChrome(): void {
   }
   if (tray) {
     const s = Math.floor(capture.state.elapsedMs / 1000);
-    if (process.platform === 'darwin') tray.setTitle(` ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+    const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    // macOS writes the length next to the menu bar icon. Windows and Linux have no title text in
+    // the tray area, so the same clock goes into the tooltip (always visible on hover).
+    if (process.platform === 'darwin') tray.setTitle(` ${clock}`);
+    tray.setToolTip(`Zeyvola · ${clock}`);
     tray.setContextMenu(Menu.buildFromTemplate([
       phase === 'paused'
         ? { label: `${tm('Devam et')} (${shortcutLabel('alt+shift+P', process.platform)})`, click: () => void capture.resume() }

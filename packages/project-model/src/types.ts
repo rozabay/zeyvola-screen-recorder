@@ -36,7 +36,7 @@ export interface MediaSource {
 }
 
 /** 'import': a video added from the computer rather than recorded in the app. */
-export type CaptureBackendId = 'native-macos' | 'native-windows' | 'web' | 'import';
+export type CaptureBackendId = 'native-macos' | 'native-windows' | 'native-linux' | 'web' | 'import';
 
 export interface CaptureInfo {
   backend: CaptureBackendId;

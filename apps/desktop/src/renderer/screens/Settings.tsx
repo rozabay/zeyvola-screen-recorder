@@ -19,6 +19,16 @@ function languageName(tag: string): string {
   }
 }
 
+/** The recording backend's name, in the interface language. */
+function backendLabel(id: BackendInfo['id'], translate: (s: string) => string): string {
+  switch (id) {
+    case 'web': return translate('Tarayıcı yedek kaydı');
+    case 'native-macos': return translate('Yerel kayıt (macOS)');
+    case 'native-windows': return translate('Yerel kayıt (Windows)');
+    case 'native-linux': return translate('Yerel kayıt (Linux)');
+  }
+}
+
 function LanguageSection() {
   const [s, setS] = useState<SettingsInfo | null>(null);
   useEffect(() => {
@@ -90,7 +100,7 @@ export function Settings({ embedded = false }: { embedded?: boolean }) {
         <div className="perm-grid">
           {backends.map((b) => (
             <div key={b.id} className="perm-card">
-              <header><strong>{b.id === 'web' ? t("Tarayıcı yedek kaydı") : b.id === 'native-macos' ? t("Yerel kayıt (macOS)") : t("Yerel kayıt (Windows)")}</strong><Badge tone={b.available ? 'success' : 'neutral'}>{b.available ? t("Kullanılabilir") : t("Kullanılamıyor")}</Badge></header>
+              <header><strong>{backendLabel(b.id, t)}</strong><Badge tone={b.available ? 'success' : 'neutral'}>{b.available ? t("Kullanılabilir") : t("Kullanılamıyor")}</Badge></header>
               {b.reason && <p className="muted small">{b.reason}</p>}
               <ul className="caps">
                 <li className={b.capabilities.separateCursor ? 'ok' : ''}>{t("İmleç ayrı kayıt")}</li>

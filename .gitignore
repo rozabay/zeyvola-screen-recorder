@@ -34,3 +34,9 @@ tests/real-capture/.build/
 *.zip
 *.tar.gz
 *.tgz
+native/imlec-linux/bin/
+native/imlec-linux/.build/
+native/ses-linux/bin/
+native/ses-linux/.build/
+native/kayit-linux/bin/
+native/kayit-linux/.build/

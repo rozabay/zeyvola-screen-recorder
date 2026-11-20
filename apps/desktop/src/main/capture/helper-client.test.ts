@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { CaptureConfig } from '@zeyvola/protocol';
 import { msToTicks } from '@zeyvola/timing';
 import type { Recording } from '@zeyvola/project-model';
-import { HelperClient, HelperError, parseHelperLine, parseProbeOutput, prepareCommand, probeFiles, recordingResult, type HelperMessage } from './helper-client';
+import { HelperClient, HelperError, nativeBackendIdFor, parseHelperLine, parseProbeOutput, prepareCommand, probeFiles, recordingResult, type HelperMessage } from './helper-client';
 import { parseSessionLog, recoverFolder, SESSION_FILE } from './recovery';
 import type { BackendStartArgs } from './types';
 
@@ -65,11 +65,13 @@ describe('helper protocol', () => {
   });
 
   it('describes the recording for the session log, so it can be rebuilt after a crash', () => {
-    expect(prepareCommand(args({ kind: 'region', region: { x: 100, y: 50, w: 800, h: 600 } }), 1).meta).toEqual({
+    expect(prepareCommand(args({ kind: 'region', region: { x: 100, y: 50, w: 800, h: 600 } }), 1, 'native-macos').meta).toEqual({
       recordingId: 'rec_1', backend: 'native-macos',
       target: { kind: 'region', label: 'Ekran 1', bounds: { x: 0, y: 0, w: 1512, h: 982 }, scaleFactor: 2 },
     });
     expect((prepareCommand(args(), 1, 'native-windows').meta as { backend: string }).backend).toBe('native-windows');
+    // The default follows the running platform: the helper writes this id into session.jsonl.
+    expect((prepareCommand(args(), 1).meta as { backend: string }).backend).toBe(nativeBackendIdFor(process.platform));
   });
 
   it('reads the probe report and keeps per-file errors', () => {
@@ -171,7 +173,7 @@ describe('helper process (stand-in)', () => {
     const c = fake('crash-with-files');
     await c.open();
     const ready = c.waitFor('ready', 2000);
-    c.send(prepareCommand(a, 1));
+    c.send(prepareCommand(a, 1, 'native-macos'));
     await ready;
     const started = c.waitFor('started', 2000);
     c.send({ cmd: 'go' });
@@ -183,7 +185,7 @@ describe('helper process (stand-in)', () => {
     await exited;
 
     const log = parseSessionLog(readFileSync(join(outDir, SESSION_FILE), 'utf8'));
-    expect(log?.meta).toEqual(prepareCommand(a, 1).meta);
+    expect(log?.meta).toEqual(prepareCommand(a, 1, 'native-macos').meta);
     expect(log?.markers).toHaveLength(1);
     const added: Recording[] = [];
     const r = await recoverFolder('prj_test0001', outDir, 'rec_crash0001', {

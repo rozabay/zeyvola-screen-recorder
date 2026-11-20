@@ -74,9 +74,23 @@ export const BINARY_NOTICES = {
     [/^dxcompiler\.dll$/, 'chromium:DirectX-Shader-Compiler'],
     [/^resources\/bin\/zeyvola-win\.exe$/, 'own'],
   ],
+  linux: [
+    [/^zeyvola$/, 'electron'],
+    [/^chrome-sandbox$/, 'electron'],
+    [/^chrome_crashpad_handler$/, 'chromium:Crashpad'],
+    [/^libffmpeg\.so$/, 'chromium:ffmpeg'],
+    [/^libEGL\.so$/, 'electron'],
+    [/^libGLESv2\.so$/, 'electron'],
+    [/^libvk_swiftshader\.so$/, 'chromium:SwiftShader'],
+    [/^libvulkan\.so(\.1)?$/, 'chromium:Vulkan Loader Components'],
+    [/^libvulkan_lvp\.so$/, 'chromium:Vulkan Loader Components'],
+    [/^libGLESv2\.so\.\d+$/, 'electron'],
+    [/^libEGL\.so\.\d+$/, 'electron'],
+    [/^resources\/bin\/(zeyvola-kayit|zeyvola-imlec|zeyvola-ses|zeyvola-foto)$/, 'own'],
+  ],
 };
 
-/** Mach-O (macOS) or PE (Windows) files in a package, relative to it. */
+/** Mach-O (macOS), PE (Windows) or ELF (Linux) files in a package, relative to it. */
 function binaries(dir, platform) {
   const out = [];
   const walk = (d) => {
@@ -88,8 +102,9 @@ function binaries(dir, platform) {
       const magic = fd.length === 4 ? fd.readUInt32BE(0) : 0;
       const macho = [0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe].includes(magic);
       const pe = fd[0] === 0x4d && fd[1] === 0x5a;
+      const elf = fd[0] === 0x7f && fd[1] === 0x45 && fd[2] === 0x4c && fd[3] === 0x46;
       // Package-relative, always with '/', as the BINARY_NOTICES patterns are written.
-      if ((platform === 'darwin' && macho) || (platform === 'win32' && pe)) out.push(p.slice(dir.length + 1).split(sep).join('/'));
+      if ((platform === 'darwin' && macho) || (platform === 'win32' && pe) || (platform === 'linux' && elf)) out.push(p.slice(dir.length + 1).split(sep).join('/'));
     }
   };
   walk(dir);
@@ -161,6 +176,50 @@ const sha256 = (p) => createHash('sha256').update(readFileSync(p)).digest('hex')
 const count = (file, needle) => { const b = readFileSync(file); let n = 0; let i = 0; const s = Buffer.from(needle); while ((i = b.indexOf(s, i)) >= 0) { n++; i += s.length; } return n; };
 const titles = (html) => [...html.matchAll(/<span class="title">([\s\S]*?)<\/span>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim());
 
+/**
+ * DT_NEEDED entries of an ELF binary (the shared libraries it loads at start), read from the
+ * dynamic section's string table. Handles both ELF classes and both byte orders.
+ */
+function elfNeeded(file) {
+  const b = readFileSync(file);
+  const is64 = b[4] === 2;
+  const le = b[5] === 1;
+  const u16 = (o) => (le ? b.readUInt16LE(o) : b.readUInt16BE(o));
+  const u32 = (o) => (le ? b.readUInt32LE(o) : b.readUInt32BE(o));
+  const u64 = (o) => Number(le ? b.readBigUInt64LE(o) : b.readBigUInt64BE(o));
+  const shoff = is64 ? Number(le ? b.readBigUInt64LE(0x28) : b.readBigUInt64BE(0x28)) : u32(0x20);
+  const shentsize = u16(is64 ? 0x3a : 0x2e);
+  const shnum = u16(is64 ? 0x3c : 0x30);
+  const sections = [];
+  for (let i = 0; i < shnum; i++) {
+    const o = shoff + i * shentsize;
+    sections.push({
+      type: u32(o + 4),
+      offset: is64 ? u64(o + 0x18) : u32(o + 0x10),
+      size: is64 ? u64(o + 0x20) : u32(o + 0x14),
+      link: u32(o + (is64 ? 0x28 : 0x18)),
+    });
+  }
+  // SHT_DYNAMIC = 6; its sh_link names the string table (SHT_STRTAB = 3).
+  const dyn = sections.find((s) => s.type === 6);
+  if (!dyn) return [];
+  const strtab = sections[dyn.link];
+  if (!strtab) return [];
+  const out = [];
+  // DT_NULL = 0, DT_NEEDED = 1; each entry is two words (tag, value).
+  const step = is64 ? 16 : 8;
+  for (let o = dyn.offset; o < dyn.offset + dyn.size; o += step) {
+    const tag = is64 ? u64(o) : u32(o);
+    const val = is64 ? u64(o + 8) : u32(o + 4);
+    if (tag === 0) break;
+    if (tag !== 1) continue;
+    let end = strtab.offset + val;
+    while (end < b.length && b[end] !== 0) end++;
+    out.push(b.toString('utf8', strtab.offset + val, end));
+  }
+  return out;
+}
+
 function layout(dir) {
   if (existsSync(join(dir, 'Zeyvola.app'))) {
     const app = join(dir, 'Zeyvola.app');
@@ -170,7 +229,16 @@ function layout(dir) {
   if (existsSync(join(dir, 'Zeyvola.exe'))) {
     return { platform: 'win32', app: dir, resources: join(dir, 'resources'), main: join(dir, 'Zeyvola.exe'), ffmpeg: join(dir, 'ffmpeg.dll'), exe: join(dir, 'Zeyvola.exe') };
   }
-  throw new Error(`${dir}: Zeyvola.app veya Zeyvola.exe yok`);
+  if (existsSync(join(dir, 'zeyvola'))) {
+    return { platform: 'linux', app: dir, resources: join(dir, 'resources'), main: join(dir, 'zeyvola'), ffmpeg: join(dir, 'libffmpeg.so'), exe: join(dir, 'zeyvola') };
+  }
+  throw new Error(`${dir}: Zeyvola.app, Zeyvola.exe veya zeyvola (Linux) yok`);
+}
+
+/** ELF e_machine of a Linux binary: 62 = x86-64, 183 = AArch64. */
+function elfMachine(file) {
+  const b = readFileSync(file);
+  return b.readUInt16LE(18);
 }
 
 function lister() {
@@ -212,7 +280,9 @@ export async function audit(dir, profile, { probe = false, release = false } = {
   const peMachine = (f) => { const b = readFileSync(f); return b.readUInt16LE(b.readUInt32LE(0x3c) + 4); };
   const arch = L.platform === 'darwin'
     ? execFileSync('lipo', ['-archs', L.main], { encoding: 'utf8' }).trim()
-    : (peMachine(L.main) === 0xaa64 ? 'arm64' : 'x64');
+    : L.platform === 'linux'
+      ? (elfMachine(L.main) === 183 ? 'arm64' : 'x64')
+      : (peMachine(L.main) === 0xaa64 ? 'arm64' : 'x64');
   report.arch = arch;
   const zipArch = arch.includes('arm64') ? 'arm64' : 'x64';
   const electronVersion = readFileSync(join(dir, 'version'), 'utf8').trim();
@@ -227,13 +297,15 @@ export async function audit(dir, profile, { probe = false, release = false } = {
     if (bad.length) fails.push(`libffmpeg patent havuzlu çözücü içeriyor: ${bad.join(', ')}`);
     if (c.encoders.length) notes.push(`libffmpeg kodlayıcı içeriyor: ${c.encoders.join(', ')}`);
   }
-  const official = await officialZipEntry(`ffmpeg:${L.platform}:${zipArch}`, L.platform === 'darwin' ? 'libffmpeg.dylib' : 'ffmpeg.dll');
-  const stock = await officialZipEntry(`electron:${L.platform}:${zipArch}`, L.platform === 'darwin' ? 'Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib' : 'ffmpeg.dll');
+  const ffmpegFile = L.platform === 'darwin' ? 'libffmpeg.dylib' : L.platform === 'linux' ? 'libffmpeg.so' : 'ffmpeg.dll';
+  const official = await officialZipEntry(`ffmpeg:${L.platform}:${zipArch}`, ffmpegFile);
+  const stock = await officialZipEntry(`electron:${L.platform}:${zipArch}`, L.platform === 'darwin' ? 'Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib' : ffmpegFile);
   ff.matchesOfficialCodecFreeBuild = official ? official.sha256 === ff.sha256 : null;
   ff.matchesStockElectronBuild = stock ? stock.sha256 === ff.sha256 : null;
   if (ff.matchesOfficialCodecFreeBuild === false) fails.push('ffmpeg kitaplığı Electron\'un resmi codec\'siz derlemesiyle aynı değil');
   if (ff.matchesOfficialCodecFreeBuild === null) fails.push('karşılaştırma için resmi ffmpeg zip\'i önbellekte yok (tools/electron-artifacts.mjs)');
   if (L.platform === 'win32') notes.push('Windows ffmpeg.dll bu Mac\'te çalıştırılamadığı için codec listesi çıkarılamadı; resmi codec\'siz derlemeyle SHA-256 eşleşmesine bakıldı');
+  if (L.platform === 'linux') notes.push('Linux libffmpeg.so kaynak makinede çalıştırılamıyorsa codec listesi çıkarılamaz; resmi codec\'siz derlemeyle SHA-256 eşleşmesine bakıldı');
   report.checks.ffmpeg = ff;
 
   // 2) Codec libraries compiled into Electron
@@ -314,6 +386,32 @@ export async function audit(dir, profile, { probe = false, release = false } = {
     } else {
       notes.push('d3dcompiler_47.dll pakette yok (--omit-d3dcompiler): WebGL için Windows\'un kendi kopyası ya da ANGLE Vulkan gerekir; gerçek Windows\'ta doğrulanmadı');
     }
+  }
+
+  // 3f) Linux helpers: our own C programs. They may link only the system libraries and the
+  // media/desktop stack (GStreamer, PipeWire, X11/XInput2, GLib, libvpx, libopus), and never read
+  // the keyboard.
+  if (L.platform === 'linux') {
+    const helpers = ['zeyvola-kayit', 'zeyvola-imlec', 'zeyvola-ses'];
+    const ELF_LIBS_OK = /^(libc|libm|libpthread|libdl|librt|libgst|libglib|libgobject|libgio|libpipewire|libspa|libX11|libXi|libXfixes|libXext|libXrandr|libxcb|libvpx|libopus|libvorbis|libavcodec|libavutil|libdrm|libudev|libsystemd|libdbus|libei|libegl|libGL|libgbm|libz|libstdc\+\+|libgcc_s|ld-linux)/i;
+    const FORBIDDEN_SYMBOLS = /XGrabKeyboard|XRecordEnableContext|xkb_state_new|libinput_device_keyboard/i;
+    const check = {};
+    for (const name of helpers) {
+      const file = join(L.resources, 'bin', name);
+      const present = existsSync(file);
+      check[name] = { present };
+      if (!present) continue;
+      // DT_NEEDED entries, straight from the dynamic section (no readelf dependency needed).
+      let libs = [];
+      try { libs = elfNeeded(file); } catch { /* a stripped or unusual binary: the empty list says so */ }
+      check[name].libs = libs;
+      check[name].notAllowed = libs.filter((l) => !ELF_LIBS_OK.test(l));
+      if (check[name].notAllowed.length) fails.push(`${name} izin verilmeyen kitaplıklara bağlı: ${check[name].notAllowed.join(', ')}`);
+      const bad = FORBIDDEN_SYMBOLS.exec(readFileSync(file, 'latin1'))?.[0];
+      if (bad) fails.push(`${name} klavye okuma işareti taşıyor: ${bad}`);
+    }
+    report.checks.linuxHelpers = check;
+    if (!check['zeyvola-kayit']?.present) notes.push('Linux paketinde kayıt yardımcısı (resources/bin/zeyvola-kayit) yok: kayıt tarayıcı yoluyla yapılır');
   }
 
   // 4) Renderer bundle

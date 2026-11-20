@@ -1,0 +1,102 @@
+name: Linux
+
+# The Linux build and tests. The macOS job (ci.yml) and the Windows one (windows.yml) stay as they
+# are; this file adds the third platform the app now supports.
+#
+# The native helpers are compiled here for the first time on a clean runner, so a missing
+# pkg-config dependency or a C warning-as-error fails the build instead of a user's first run.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/windows.yml'
+      - 'tests/windows-env/**'
+      - 'tests/windows-terms/**'
+      - 'tests/media-check/mf-check.ps1'
+      - 'tests/real-capture-web/windows-clicks.ps1'
+  pull_request:
+    paths-ignore:
+      - '.github/workflows/windows.yml'
+      - 'tests/windows-env/**'
+      - 'tests/windows-terms/**'
+      - 'tests/media-check/mf-check.ps1'
+      - 'tests/real-capture-web/windows-clicks.ps1'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      electron_config_cache: ${{ github.workspace }}/.cache/ci-electron
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - run: corepack enable
+
+      # Electron's runtime libraries, the X11/Wayland headers the helpers compile against, and
+      # GStreamer/PipeWire for the recording helper. Keep this list in step with the .deb's
+      # Depends (apps/desktop/scripts/package.mjs, DEB_DEPENDS).
+      - name: Sistem paketleri / System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libnss3 libasound2t64 libgbm-dev libxss1 libxtst6 \
+            libxi-dev libx11-dev libxext-dev libxfixes-dev libxrandr-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pipewire \
+            libpipewire-0.3-dev libei-dev libopus-dev libvpx-dev \
+            libdbus-1-dev libglib2.0-dev libsecret-1-dev \
+            xvfb x11-utils ffmpeg
+
+      - name: Electron önbelleği / Electron cache
+        id: electron-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.electron_config_cache }}
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - run: pnpm install --frozen-lockfile
+      - name: Electron ikilisi / Electron binary
+        run: pnpm --filter @zeyvola/desktop exec node node_modules/electron/install.js
+
+      - name: Electron önbelleğini kaydet / save Electron cache
+        if: steps.electron-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.electron_config_cache }}
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - run: pnpm typecheck
+
+      # The three native helpers: pointer (X11 + portal), sound (GStreamer), recorder (GStreamer).
+      - name: Yerel yardımcılar / Native helpers
+        run: pnpm native:linux
+
+      # The WebM recorder test drives the real binary on a virtual display; the rest is pure.
+      - name: Birim testleri ve kayıt testi / Unit and recording tests
+        run: xvfb-run -a pnpm test
+
+      # A package, its licence/codec audit, and the .deb. --skip-build reuses the bundle the tests
+      # just made; the audit is what the packaging step runs on its own.
+      - name: Paket ve denetim / Package and audit
+        run: |
+          pnpm build
+          node apps/desktop/scripts/package.mjs --platform linux --arch x64 --skip-build
+
+      - name: Paket çıktısı / Package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeyvola-linux-x64
+          path: |
+            apps/desktop/out/mp4/Zeyvola-*-linux-x64.deb
+            apps/desktop/out/mp4/codec-audit-linux-x64.json
+          if-no-files-found: error

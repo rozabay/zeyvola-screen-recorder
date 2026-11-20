@@ -1,17 +1,18 @@
 import { EventEmitter } from 'node:events';
 import { readFile, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
-import { desktopCapturer, screen, type BrowserWindow } from 'electron';
+import { desktopCapturer, nativeImage, screen, type BrowserWindow } from 'electron';
 import { newId, type Rect, type Recording } from '@zeyvola/project-model';
 import type { BackendInfo, CaptureConfig, CaptureResult, CaptureState, RecoveryNotice, SourceInfo } from '@zeyvola/protocol';
 import { localeOf } from '../../shared/i18n';
 import type { ProjectStore } from '../projects';
 import { currentLang, tm } from '../settings';
 import type { ProbedFile } from './helper-client';
-import { NativeMacBackend } from './native-macos';
+import { NativeHelperBackend } from './native-helper';
 import { parseSessionLog, recoverAbandoned, recoverFolder, SESSION_FILE, type FolderResult, type ProjectEntry, type RecoveryDeps } from './recovery';
 import { RecorderCrash, type CaptureBackend } from './types';
 import { WebCaptureBackend } from './web-backend';
+import { waylandSession } from './session-type';
 import { probeWebmFolder } from './webm-probe';
 
 export interface ManagerDeps {
@@ -39,7 +40,7 @@ const IDLE: CaptureState = { phase: 'idle', backend: null, elapsedMs: 0, countdo
 export class CaptureManager extends EventEmitter {
   state: CaptureState = { ...IDLE };
   readonly web: WebCaptureBackend;
-  readonly native: NativeMacBackend;
+  readonly native: NativeHelperBackend;
   private active: CaptureBackend | null = null;
   private session: Session | null = null;
   /** Recordings rebuilt after a crash that the user has not dismissed yet. */
@@ -53,7 +54,7 @@ export class CaptureManager extends EventEmitter {
   constructor(private readonly deps: ManagerDeps) {
     super();
     this.web = new WebCaptureBackend(deps.createCaptureWindow);
-    this.native = new NativeMacBackend();
+    this.native = new NativeHelperBackend();
     for (const b of [this.web, this.native] as CaptureBackend[]) {
       b.on('level', (v: number) => { this.state.micLevel = v; });
       b.on('status', (s: { droppedFrames: number }) => { this.state.droppedFrames = s.droppedFrames; });
@@ -77,7 +78,13 @@ export class CaptureManager extends EventEmitter {
     const displays = screen.getAllDisplays();
     const primaryId = String(screen.getPrimaryDisplay().id);
     const isPrimary = (s: SourceInfo) => s.kind === 'display' && s.displayId === primaryId;
-    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 480, height: 300 }, fetchWindowIcons: true });
+    // Wayland: desktopCapturer.getSources() either returns nothing usable or opens the portal's
+    // share dialog just to list — and then there is nothing to pick from anyway, because the
+    // portal itself asks the user what to share. The list is therefore built from the displays
+    // Electron knows; the real choice happens in the portal dialog at recording time.
+    const sources = waylandSession()
+      ? this.syntheticWaylandSources(displays)
+      : await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 480, height: 300 }, fetchWindowIcons: true });
     return sources.map((s): SourceInfo => {
       const isScreen = s.id.startsWith('screen:');
       const d = isScreen ? displays.find((x) => String(x.id) === s.display_id) ?? displays[0] : undefined;
@@ -95,6 +102,22 @@ export class CaptureManager extends EventEmitter {
       // The main display first: the recording screen preselects the first entry, and the
       // pointer is usually on the main display (recording another screen leaves no zooms).
       .sort((a, b) => Number(isPrimary(b)) - Number(isPrimary(a)));
+  }
+
+  /**
+   * The source list on Wayland, built without asking the portal. A display entry per screen, and
+   * for windows one entry that says the choice happens in the portal's own dialog: the portal
+   * decides what is shared, and a list of windows is something Wayland does not give an
+   * application at all. Asking desktopCapturer here would be both empty and a second prompt.
+   */
+  private syntheticWaylandSources(displays: Electron.Display[]): Electron.DesktopCapturerSource[] {
+    const asSource = (id: string, name: string, displayId: string): Electron.DesktopCapturerSource => ({
+      id, name, display_id: displayId, thumbnail: nativeImage.createEmpty(), appIcon: nativeImage.createEmpty(),
+    });
+    const screens = displays.map((d, i) => asSource(
+      `screen:${d.id}:0`, displays.length > 1 ? `${tm('Ekran')} ${i + 1} (${d.size.width}×${d.size.height})` : tm('Tüm ekran'), String(d.id)));
+    const windows = [asSource('window:0:0', tm('Paylaşım penceresinde seç'), displays[0] ? String(displays[0].id) : '0')];
+    return [...screens, ...windows];
   }
 
   private pickBackend(config: CaptureConfig): CaptureBackend {
@@ -145,8 +168,9 @@ export class CaptureManager extends EventEmitter {
       if (prepError) throw prepError;
       if (!this.session) return;
       await this.deps.beforeRecording?.();
-      // Chromium capture on macOS would record our own HUD; hide it and rely on tray + shortcuts.
-      if (backend === this.web && process.platform === 'darwin') this.deps.hideHud(true);
+      // Chromium capture on macOS and Linux would record our own HUD (neither can exclude windows
+      // from the stream the way the native helpers do); hide it and rely on tray + shortcuts.
+      if (backend === this.web && (process.platform === 'darwin' || process.platform === 'linux')) this.deps.hideHud(true);
       await backend.start(args);
       this.elapsedBase = 0;
       this.runningSince = Date.now();
@@ -278,12 +302,26 @@ export class CaptureManager extends EventEmitter {
 
   private async recoverSession(session: Session, backend: CaptureBackend, cause: Error): Promise<CaptureResult> {
     if (!backend.probe) throw cause;
-    const r = await recoverFolder(session.projectId, session.outDir, session.recordingId, this.recoveryDeps(backend.probe.bind(backend), true));
+    const r = await recoverFolder(session.projectId, session.outDir, session.recordingId,
+      this.recoveryDeps((dir) => this.measureFolder(dir, backend.probe!.bind(backend)), true));
     if (r.status !== 'recovered') throw new Error(tm("Kayıt yardımcısı beklenmedik şekilde kapandı; kurtarılabilecek görüntü kalmadı."));
     await this.noteRecovered(r);
     const result = { projectId: session.projectId, recordingId: session.recordingId };
     this.emit('finished', result);
     return result;
+  }
+
+  /**
+   * How much of each file can be played. WebM logs (the Chromium path and the Linux helper) are
+   * measured here; the other platforms' helpers report it themselves (`--probe-files`).
+   */
+  private async measureFolder(dir: string, fallback: (dir: string) => Promise<ProbedFile[]>): Promise<ProbedFile[]> {
+    let log;
+    try { log = parseSessionLog(await readFile(join(dir, SESSION_FILE), 'utf8')); } catch { return fallback(dir); }
+    if (log?.meta?.backend === 'web' || log?.meta?.backend === 'native-linux') {
+      return probeWebmFolder(dir, log.tracks.map((t) => t.name));
+    }
+    return fallback(dir);
   }
 
   /** `ownSession`: the folder of the session that just ended, whose helper is known to be gone. */
@@ -311,11 +349,12 @@ export class CaptureManager extends EventEmitter {
       try { projects.push({ id, dir, recordingIds: new Set(Object.keys((await store.read(id)).recordings)) }); } catch { /* unreadable project */ }
     }
     const probe = async (dir: string): Promise<ProbedFile[]> => {
-      const log = parseSessionLog(await readFile(join(dir, SESSION_FILE), 'utf8'));
-      if (log?.meta?.backend === 'web') return probeWebmFolder(dir, log.tracks.map((t) => t.name));
-      // Thrown before anything is written: the folder is tried again when the helper is there.
-      if (!this.native.info.available) throw new Error('native helper not available');
-      return this.native.probe(dir);
+      // WebM logs are measured here; anything else by the platform's helper, when it is present.
+      // A folder that cannot be measured yet is tried again on the next start.
+      return this.measureFolder(dir, async () => {
+        if (!this.native.info.available) throw new Error('native helper not available');
+        return this.native.probe(dir);
+      });
     };
     const results = await recoverAbandoned(projects, this.recoveryDeps(probe), (dir, e) => {
       process.stderr.write(`Kurtarma başarısız (${dir}): ${String(e)}\n`);

@@ -21,7 +21,7 @@
 // macOS packages get an ad hoc signature, Windows ones none; distribution needs real signing.
 // The executable's version details name Zeyvola and its developer; the icon is still Electron's.
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -34,7 +34,6 @@ const { writeDist } = await import(pathToFileURL(join(root, 'tools', 'third-part
 const { setVersionInfo } = await import(pathToFileURL(join(root, 'tools', 'win-version-info.mjs')).href);
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i >= 0 ? process.argv[i + 1] : fallback; };
-// The released distribution is A (since 2026-11-13, docs/denetim/2026-11-13-mp4-h264-karari.md):
 // MP4 (H.264 + AAC) and WebM (VP9 + Opus) export, and the macOS recorder (ScreenCaptureKit; it writes
 // H.264 with VideoToolbox). The released profile carries the plain identifier com.zeyvola.app, which
 // users' macOS permissions belong to; the other profiles get a suffix (bundleIdFor).
@@ -42,13 +41,15 @@ const profile = arg('profile', 'mp4');
 const platform = arg('platform', 'darwin');
 const arch = arg('arch', process.arch);
 if (!['mp4', 'webm', 'webm-vp8'].includes(profile)) throw new Error('--profile mp4 | webm | webm-vp8');
-if (!['darwin', 'win32'].includes(platform)) throw new Error('--platform darwin | win32');
+if (!['darwin', 'win32', 'linux'].includes(platform)) throw new Error('--platform darwin | win32 | linux');
 if (!['arm64', 'x64'].includes(arch)) throw new Error('--arch arm64 | x64');
 // A macOS package needs macOS's own tools (ditto, PlistBuddy, codesign, lipo, swiftc). A Windows
 // package is made on macOS (helper cross-compiled with zig) or on Windows itself (GitHub
-// windows-latest: bsdtar from System32, zig from tools/.cache/zig or ZIG or PATH).
+// windows-latest: bsdtar from System32, zig from tools/.cache/zig or ZIG or PATH). A Linux package
+// is made on Linux: its helpers are compiled with gcc/pkg-config and the .deb with dpkg-deb.
 if (platform === 'darwin' && process.platform !== 'darwin') throw new Error('macOS paketi yalnızca macOS üzerinde derlenir (ditto, codesign, PlistBuddy, lipo)');
 if (platform === 'win32' && !['darwin', 'win32'].includes(process.platform)) throw new Error('Windows paketi macOS ya da Windows üzerinde derlenir');
+if (platform === 'linux' && process.platform !== 'linux') throw new Error('Linux paketi yalnızca Linux üzerinde derlenir (gcc, pkg-config, dpkg-deb)');
 
 const pkg = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
 /** The app's own copyright line (also in NOTICE and src/shared/brand.ts; brand.test.ts keeps them equal). */
@@ -79,7 +80,8 @@ const ffmpegZip = await zip(`ffmpeg:${platform}:${arch}`);
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-// On macOS ditto keeps the framework symlinks of the bundle (extractZip).
+// On macOS ditto keeps the framework symlinks of the bundle (extractZip). The Linux zip holds the
+// files at its root (no wrapping folder), so it is extracted as-is.
 extractZip(electronZip, out);
 const work = mkdtempSync(join(tmpdir(), 'zeyvola-ffmpeg-'));
 extractZip(ffmpegZip, work);
@@ -149,6 +151,22 @@ if (platform === 'darwin') {
   // their AAC sound, which the codec-free libffmpeg cannot decode.
   shipHelper('input-macos', 'zeyvola-input');
   shipHelper('audio-macos', 'zeyvola-audio');
+} else if (platform === 'linux') {
+  // Electron's Linux binary is "electron"; the package's is "zeyvola" (also what app.isPackaged and
+  // the desktop entry expect).
+  renameSync(join(out, 'electron'), join(out, 'zeyvola'));
+  chmodSync(join(out, 'zeyvola'), 0o755);
+  resources = join(out, 'resources');
+  ffmpegTarget = join(out, 'libffmpeg.so');
+  cpSync(join(work, 'libffmpeg.so'), ffmpegTarget);
+  // The Chromium sandbox helper must stay setuid root; dpkg-deb keeps the mode and owner
+  // (--root-owner-group), which is the reason a .deb is used instead of an AppImage.
+  chmodSync(join(out, 'chrome-sandbox'), 0o4755);
+  chmodSync(join(out, 'chrome_crashpad_handler'), 0o755);
+  // The three helpers sharing one line protocol (helper-client.ts): recorder, pointer, sound.
+  shipHelper('kayit-linux', 'zeyvola-kayit');
+  shipHelper('imlec-linux', 'zeyvola-imlec');
+  shipHelper('ses-linux', 'zeyvola-ses');
 } else {
   renameSync(join(out, 'electron.exe'), join(out, 'Zeyvola.exe'));
   // Properties › Details of the executable: Zeyvola and its developer instead of Electron's details.
@@ -204,7 +222,7 @@ cpSync(join(app, 'dist', 'licenses'), join(resources, 'licenses'), { recursive: 
 if (platform === 'win32') cpSync(join(root, 'tools', 'notices-supplement', 'MICROSOFT-D3DCOMPILER-TERMS.txt'), join(resources, 'licenses', 'MICROSOFT-D3DCOMPILER-TERMS.txt'));
 writeFileSync(join(resources, 'licenses', 'FFMPEG-LGPL.md'), ffmpegNotice());
 cpSync(join(resources, 'licenses', 'FFMPEG-LGPL.md'), join(out, 'FFMPEG-LGPL.md'));
-writeFileSync(join(resources, 'licenses', 'DISTRIBUTION.json'), `${JSON.stringify({ app: pkg.version, profile, platform, arch, electron: ELECTRON_VERSION, ffmpeg: 'electron-official-without-proprietary-codecs', recorder: platform === 'darwin' && profile === 'mp4', mp4Export: profile === 'webm-vp8' ? null : 'h264+aac (operating-system encoders)' }, null, 1)}\n`);
+writeFileSync(join(resources, 'licenses', 'DISTRIBUTION.json'), `${JSON.stringify({ app: pkg.version, profile, platform, arch, electron: ELECTRON_VERSION, ffmpeg: 'electron-official-without-proprietary-codecs', recorder: (platform === 'darwin' && profile === 'mp4') || platform === 'linux', mp4Export: profile === 'webm-vp8' ? null : 'h264+aac (operating-system encoders)' }, null, 1)}\n`);
 if (problems.length) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   throw new Error('Lisans bildirimleri eksik; paket tamamlanmadı');
@@ -215,10 +233,136 @@ if (platform === 'darwin') {
   // The outer bundle again, now with the fixed requirement; the nested helpers keep their own.
   if (process.argv.includes('--test-signing')) sh('codesign', ['--force', '--sign', '-', '--requirements', `=designated => identifier "${bundleIdFor(profile)}"`, join(out, 'Zeyvola.app')], { stdio: 'ignore' });
 }
+const DEB_DEPENDS = [
+  // Electron itself.
+  'libgtk-3-0 (>= 3.20)', 'libnss3', 'libasound2', 'libgbm1', 'libxss1', 'libxtst6',
+  'libx11-6', 'libx11-xcb1', 'libxcb1', 'libxext6', 'libxi6', 'libxfixes3', 'libxrandr2',
+  'libglib2.0-0', 'libdrm2', 'libexpat1', 'libdbus-1-3', 'libatk1.0-0', 'libatk-bridge2.0-0',
+  'libatspi2.0-0', 'libcups2', 'libpango-1.0-0', 'libcairo2', 'libxkbcommon0', 'libxcomposite1',
+  'libxdamage1', 'libxrender1', 'libuuid1', 'libsecret-1-0',
+  // The recording helpers (GStreamer + PipeWire).
+  'libgstreamer1.0-0 (>= 1.20)', 'gstreamer1.0-plugins-base (>= 1.20)', 'gstreamer1.0-plugins-good',
+  'gstreamer1.0-plugins-bad', 'gstreamer1.0-pipewire', 'libpipewire-0.3-0', 'libopus0', 'libvpx7 | libvpx9',
+].join(', ');
+
+// Linux: one .deb next to the unpacked package (apps/desktop/out/<profile>/).
+const deb = platform === 'linux' ? buildDeb(out, profile, arch) : null;
 
 // 5) What really ended up in the package.
 sh(process.execPath, [join(root, 'tools', 'codec-audit.mjs'), out, '--profile', profile, '--json', join(out, '..', `codec-audit-${platform}-${arch}.json`)]);
 console.log(`Paket: ${out}`);
+if (deb) console.log(`Debian paketi: ${deb}`);
+
+/**
+ * The .deb around the unpacked Linux package. FHS layout: the Electron tree under
+ * /usr/lib/zeyvola (keeping chrome-sandbox setuid), a symlink in /usr/bin, a desktop entry and
+ * hicolor icons. Built with dpkg-deb's --root-owner-group so no fakeroot is needed.
+ */
+function buildDeb(dir, profileId, archId) {
+  const stage = mkdtempSync(join(tmpdir(), 'zeyvola-deb-'));
+  try {
+    const libDir = join(stage, 'usr', 'lib', 'zeyvola');
+    cpSync(dir, libDir, { recursive: true });
+    // The Chromium sandbox needs setuid root. The build tree may sit on a file system without setuid
+    // (an NTFS mount, for example), so the bit is set here, on the package's own staging folder.
+    chmodSync(join(libDir, 'chrome-sandbox'), 0o4755);
+    chmodSync(join(libDir, 'zeyvola'), 0o755);
+    chmodSync(join(libDir, 'chrome_crashpad_handler'), 0o755);
+    for (const ad of ['zeyvola-kayit', 'zeyvola-imlec', 'zeyvola-ses']) {
+      const yol = join(libDir, 'resources', 'bin', ad);
+      if (existsSync(yol)) chmodSync(yol, 0o755);
+    }
+    mkdirSync(join(stage, 'usr', 'bin'), { recursive: true });
+    execFileSync('ln', ['-s', '/usr/lib/zeyvola/zeyvola', join(stage, 'usr', 'bin', 'zeyvola')]);
+    // Icons: the app draws its own mark (src/main/png.ts), so no image file is kept in the repo.
+    for (const [size, sizeDir] of [[128, '128x128'], [256, '256x256'], [512, '512x512']]) {
+      const d = join(stage, 'usr', 'share', 'icons', 'hicolor', sizeDir, 'apps');
+      mkdirSync(d, { recursive: true });
+      writeFileSync(join(d, 'zeyvola.png'), debIconPng(size));
+    }
+    const apps = join(stage, 'usr', 'share', 'applications');
+    mkdirSync(apps, { recursive: true });
+    writeFileSync(join(apps, 'zeyvola.desktop'), desktopEntry(profileId));
+    const debian = join(stage, 'DEBIAN');
+    mkdirSync(debian, { recursive: true });
+    writeFileSync(join(debian, 'control'), controlFile(profileId, archId));
+    writeFileSync(join(debian, 'postinst'), `#!/bin/sh
+set -e
+# The Chromium sandbox needs this binary setuid root; some tools drop the bit while copying.
+chmod 4755 /usr/lib/zeyvola/chrome-sandbox || true
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+exit 0
+`, { mode: 0o755 });
+    const target = join(dirname(out), `Zeyvola-${pkg.version}-linux-${archId}.deb`);
+    execFileSync('dpkg-deb', ['--build', '--root-owner-group', stage, target], { stdio: 'inherit' });
+    return target;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+/** Debian package name suffix for a distribution profile (only one profile is published). */
+function debName(profileId) {
+  return profileId === 'mp4' ? 'zeyvola' : `zeyvola-${profileId}`;
+}
+
+function controlFile(profileId, archId) {
+  return `Package: ${debName(profileId)}
+Version: ${pkg.version}
+Section: video
+Priority: optional
+Architecture: ${archId === 'x64' ? 'amd64' : 'arm64'}
+Maintainer: ${pkg.author} <noreply@zeyvola.local>
+Installed-Size: ${Math.round(dirSize(join(out)))}
+Depends: ${DEB_DEPENDS}
+Recommends: libavcodec-extra | libavcodec60, xdg-desktop-portal, xdg-desktop-portal-gtk | xdg-desktop-portal-gnome | xdg-desktop-portal-kde
+Homepage: ${pkg.homepage}
+Description: Zeyvola — screen recording and video editing
+ Record the screen, camera, microphone and system sound as separate tracks, then
+ zoom, mask and frame them on a timeline. Exports MP4 (H.264 + AAC through the
+ operating system's encoders, where the graphics driver provides one) and WebM
+ (VP9 + Opus).
+`;
+}
+
+function desktopEntry(profileId) {
+  const exec = debName(profileId) === 'zeyvola' ? 'zeyvola' : `/usr/lib/zeyvola/zeyvola`;
+  return `[Desktop Entry]
+Type=Application
+Name=Zeyvola
+GenericName=Screen Recorder
+Comment=Record your screen, camera and microphone, then edit the video
+Exec=${exec} %U
+Icon=zeyvola
+Terminal=false
+Categories=AudioVideo;Video;Recorder;
+Keywords=screen;record;video;capture;ekran;kayit;
+StartupWMClass=Zeyvola
+`;
+}
+
+/** The app's own mark as a PNG (the same drawing the tray icon uses), for the package icons. */
+function debIconPng(size) {
+  // The mark is drawn in code (src/main/png.ts, appIcon); tools/linux-icon.mjs bundles it on the fly.
+  const out = join(tmpdir(), `zeyvola-ikon-${process.pid}-${size}.png`);
+  try {
+    execFileSync(process.execPath, [join(root, 'tools', 'linux-icon.mjs'), out, String(size)], { stdio: 'ignore' });
+    return readFileSync(out);
+  } finally {
+    rmSync(out, { force: true });
+  }
+}
+
+function dirSize(dir) {
+  let total = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isSymbolicLink()) continue;
+    total += e.isDirectory() ? dirSize(p) : readFileSync(p).length;
+  }
+  return total / 1024;
+}
 
 /**
  * native/helper-windows/build.sh, step for step, for a Windows host (no POSIX shell needed; on

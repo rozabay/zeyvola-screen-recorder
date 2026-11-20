@@ -48,7 +48,7 @@ export function IconButton(props: { icon: IconName; label: string; onClick?: () 
 
 export function Segmented<T extends string>(props: {
   value: T;
-  options: { value: T; label: string; icon?: IconName }[];
+  options: { value: T; label: string; icon?: IconName; disabled?: boolean }[];
   onChange: (v: T) => void;
   size?: 'sm' | 'md';
   label?: string;
@@ -62,6 +62,7 @@ export function Segmented<T extends string>(props: {
           role="radio"
           aria-checked={o.value === props.value}
           className={o.value === props.value ? 'is-on' : ''}
+          disabled={o.disabled}
           onClick={() => props.onChange(o.value)}
         >
           {o.icon && <Icon name={o.icon} size={15} />}

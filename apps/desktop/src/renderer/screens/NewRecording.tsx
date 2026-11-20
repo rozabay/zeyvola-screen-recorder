@@ -9,6 +9,22 @@ import { t } from '../i18n';
 type Kind = 'display' | 'window' | 'region';
 interface Region { x: number; y: number; w: number; h: number }
 
+/**
+ * What to say when the source list came back empty. Only macOS has a permission pane for it;
+ * on Linux X11 the list is empty when the X server is not reachable, and on Wayland this message
+ * is not reached at all (the list is built from the displays).
+ */
+function missingSourcesNote(): string {
+  switch (window.zeyvola.platform) {
+    case 'darwin':
+      return t("Kaynak bulunamadı. macOS'ta Sistem Ayarları › Gizlilik ve Güvenlik › Ekran Kaydı bölümünden izin vermeniz gerekebilir.");
+    case 'linux':
+      return t("Kaynak bulunamadı. X11 görüntü sunucusuna erişilebildiğinden emin olun (uzak bir oturumda DISPLAY ayarını kontrol edin).");
+    default:
+      return t("Kaynak bulunamadı.");
+  }
+}
+
 function useDevices(kind: 'videoinput' | 'audioinput', enabled: boolean) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const refresh = useCallback(async () => {
@@ -143,7 +159,7 @@ export function NewRecording(props: { initialKind?: Kind; onBack: () => void; on
     return () => { cancelled = true; cancelAnimationFrame(raf); stream?.getTracks().forEach((t) => t.stop()); void ctx?.close(); };
   }, [micOn, micId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const native = backends.find((b) => b.id === 'native-macos' || b.id === 'native-windows');
+  const native = backends.find((b) => b.id !== 'web');
   const effective = backend === 'web' || (backend === 'auto' && !native?.available) ? backends.find((b) => b.id === 'web') : native;
   const systemAudioSupported = !!effective?.capabilities.systemAudio;
   const source = visible.find((s) => s.id === selected);
@@ -175,6 +191,12 @@ export function NewRecording(props: { initialKind?: Kind; onBack: () => void; on
     }
   };
 
+  /** Runs a permission action and shows its reason when the system has nothing to open (Linux). */
+  const openSettings = (pane: 'screen' | 'camera' | 'microphone' | 'input') => {
+    setError(null);
+    api.openPermissionSettings(pane).catch((e: Error) => setError(e.message));
+  };
+
   const permRow = (label: string, key: keyof PermissionInfo, pane: 'screen' | 'camera' | 'microphone' | 'input') => {
     const st = perms?.[key] ?? 'unknown';
     const ok = st === 'granted';
@@ -183,7 +205,7 @@ export function NewRecording(props: { initialKind?: Kind; onBack: () => void; on
         <span className={`perm-dot is-${ok ? 'ok' : st === 'denied' ? 'bad' : 'unknown'}`} />
         <span>{label}</span>
         <small className="muted">{ok ? t("İzin var") : st === 'denied' ? t("Reddedildi") : st === 'not-determined' ? t("Sorulmadı") : t("Bilinmiyor")}</small>
-        {!ok && <button type="button" className="link" onClick={() => api.openPermissionSettings(pane)}>{t("Ayarları aç")}</button>}
+        {!ok && <button type="button" className="link" onClick={() => openSettings(pane)}>{t("Ayarları aç")}</button>}
       </div>
     );
   };
@@ -206,8 +228,8 @@ export function NewRecording(props: { initialKind?: Kind; onBack: () => void; on
             <div className="note is-warning"><Icon name="warning" size={14} />
               {perms?.screen === 'denied'
                 ? t("Ekran kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Ses Kaydı bölümünde Zeyvola'yı açın, sonra Zeyvola'yı yeniden başlatın. Zeyvola listede açık görünüyorsa (ör. bir güncellemeden sonra), onu \"–\" ile listeden kaldırıp yeniden izin verin.")
-                : t("Kaynak bulunamadı. macOS'ta Sistem Ayarları › Gizlilik ve Güvenlik › Ekran Kaydı bölümünden izin vermeniz gerekebilir.")}
-              <button type="button" className="link" onClick={() => api.openPermissionSettings('screen')}>{t("Ayarları aç")}</button>
+                : missingSourcesNote()}
+              <button type="button" className="link" onClick={() => openSettings('screen')}>{t("Ayarları aç")}</button>
               {perms?.screen === 'denied' && <button type="button" className="link" onClick={() => void api.relaunch()}>{t("Yeniden başlat")}</button>}
             </div>
           )}
@@ -264,7 +286,7 @@ export function NewRecording(props: { initialKind?: Kind; onBack: () => void; on
           <div className="nr-card">
             <header><Icon name="info" size={16} /><strong>{t("Kayıt yöntemi")}</strong></header>
             <Segmented<'auto' | 'native' | 'web'> size="sm" label={t("Yöntem")} value={backend} onChange={setBackend}
-              options={[{ value: 'auto', label: t("Otomatik") }, { value: 'native', label: t("Yerel") }, { value: 'web', label: t("Yedek") }]} />
+              options={[{ value: 'auto', label: t("Otomatik") }, { value: 'native', label: t("Yerel"), disabled: !!native && !native.available }, { value: 'web', label: t("Yedek") }]} />
             <div className="backend-info">
               {effective && (
                 <>

@@ -58,19 +58,27 @@ export interface SessionLog {
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const optNum = (v: unknown, min = 0): number | undefined => (finite(v) && v > min ? v : undefined);
 
+const NATIVE_BACKENDS = ['native-macos', 'native-windows', 'native-linux'];
+
+/** The native helper a `<os>-<arch>` platform string belongs to ('darwin-arm64', 'linux-x64'). */
+function nativeBackendForPlatform(platform: string): CaptureInfo['backend'] {
+  const os = platform.split('-')[0];
+  return os === 'linux' ? 'native-linux' : os === 'win32' ? 'native-windows' : 'native-macos';
+}
+
 function parseMeta(v: unknown): SessionMeta | null {
   if (!v || typeof v !== 'object') return null;
   const m = v as Record<string, unknown>;
   const t = m.target as Record<string, unknown> | undefined;
   const b = t?.bounds as Record<string, unknown> | undefined;
-  if (typeof m.recordingId !== 'string' || (m.backend !== 'native-macos' && m.backend !== 'native-windows' && m.backend !== 'web')) return null;
+  if (typeof m.recordingId !== 'string' || (typeof m.backend !== 'string' || (!NATIVE_BACKENDS.includes(m.backend) && m.backend !== 'web'))) return null;
   if (!t || !TARGET_KINDS.includes(t.kind as never) || typeof t.label !== 'string' || !finite(t.scaleFactor) || t.scaleFactor <= 0) return null;
   if (!b || ![b.x, b.y, b.w, b.h].every(finite)) return null;
   const c = m.crop as Record<string, unknown> | undefined;
   const crop = c && [c.x, c.y, c.w, c.h].every((n) => finite(n) && n >= 0 && n <= 1) && (c.w as number) > 0 && (c.h as number) > 0
     ? { x: c.x as number, y: c.y as number, w: c.w as number, h: c.h as number } : undefined;
   return {
-    recordingId: m.recordingId, backend: m.backend,
+    recordingId: m.recordingId, backend: m.backend as SessionMeta['backend'],
     target: {
       kind: t.kind as CaptureInfo['target']['kind'], label: t.label.slice(0, 256), scaleFactor: t.scaleFactor,
       bounds: { x: b.x as number, y: b.y as number, w: b.w as number, h: b.h as number },
@@ -184,6 +192,8 @@ export function rebuildRecording(input: RebuildInput): Rebuilt | null {
   }
   const cursorFile = log.cursor && input.files.includes(log.cursor) ? rel(log.cursor) : undefined;
   const target: CaptureInfo['target'] = log.meta?.target ?? { kind: 'display', label: input.fallbackLabel ?? '', bounds: { x: 0, y: 0, w: 0, h: 0 }, scaleFactor: 1 };
+  // A log without its meta line (a helper that died very early) still names its platform here.
+  const backend = log.meta?.backend ?? nativeBackendForPlatform(input.platform);
   const recording: Recording = {
     id: recordingId,
     createdAt: new Date(log.startedAtMs ?? Date.now()).toISOString(),
@@ -191,7 +201,7 @@ export function rebuildRecording(input: RebuildInput): Rebuilt | null {
     sources,
     cursorFile,
     capture: {
-      backend: log.meta?.backend ?? 'native-macos', platform: input.platform, target,
+      backend, platform: input.platform, target,
       // The browser path bakes the cursor into the video; native helpers record it separately.
       cursorInFrames: log.meta?.backend === 'web', hasClicks: cursorFile !== undefined && (log.clicks ?? true),
       ...(log.meta?.crop ? { crop: log.meta.crop } : {}),

@@ -65,7 +65,7 @@ export class HelperError extends Error {
   }
 }
 
-type NativeBackendId = 'native-macos' | 'native-windows';
+type NativeBackendId = 'native-macos' | 'native-windows' | 'native-linux';
 
 /**
  * The app's own description of a recording, sent with "prepare" and kept unchanged by the
@@ -90,8 +90,13 @@ function numericId(sourceId: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** The helper of this platform (the id written into the recording and session.jsonl). */
+export function nativeBackendIdFor(platform: string): NativeBackendId {
+  return platform === 'linux' ? 'native-linux' : platform === 'win32' ? 'native-windows' : 'native-macos';
+}
+
 /** The "prepare" command for a recording chosen in the app. */
-export function prepareCommand(args: BackendStartArgs, ownPid: number, backend: NativeBackendId = 'native-macos'): Record<string, unknown> {
+export function prepareCommand(args: BackendStartArgs, ownPid: number, backend: NativeBackendId = nativeBackendIdFor(process.platform)): Record<string, unknown> {
   const t = args.config.target;
   const isWindow = t.kind === 'window';
   // On macOS, Electron display ids and desktopCapturer window ids are the system's ids.

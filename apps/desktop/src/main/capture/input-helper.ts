@@ -16,12 +16,17 @@ import { nowMs } from './session-clock';
  * Without the helper the recording simply has no click data.
  */
 export function inputHelperPath(): string {
-  const name = process.platform === 'win32' ? 'zeyvola-win.exe' : 'zeyvola-input';
+  const name = process.platform === 'win32' ? 'zeyvola-win.exe' : process.platform === 'linux' ? 'zeyvola-imlec' : 'zeyvola-input';
   if (app.isPackaged) return join(process.resourcesPath, 'bin', name);
-  return resolve(app.getAppPath(), '..', '..', 'native', process.platform === 'win32' ? 'helper-windows' : 'input-macos', 'bin', name);
+  const dir = process.platform === 'win32' ? 'helper-windows' : process.platform === 'linux' ? 'imlec-linux' : 'input-macos';
+  return resolve(app.getAppPath(), '..', '..', 'native', dir, 'bin', name);
 }
 
-/** Arguments for the helper; windowId (CGWindowID on macOS, HWND on Windows) adds the window's bounds. */
+/**
+ * Arguments for the helper; windowId (CGWindowID on macOS, HWND on Windows, X11 Window on Linux)
+ * adds the window's bounds. A window id only exists for the macOS and Windows sources; on Wayland
+ * the helper is started without one and the recording behaves as a full-display capture.
+ */
 export function inputHelperArgs(windowId?: number | null, platform: NodeJS.Platform = process.platform): string[] {
   const window = windowId != null ? ['--window', String(windowId)] : [];
   return platform === 'win32' ? ['--input', ...window] : window;
@@ -39,7 +44,7 @@ export function windowIdOf(sourceId: string): number | null {
 }
 
 export function inputHelperAvailable(): boolean {
-  return (process.platform === 'darwin' || process.platform === 'win32') && existsSync(inputHelperPath());
+  return (process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux') && existsSync(inputHelperPath());
 }
 
 /** One pointer event, timed in epoch milliseconds (the recording clock's base). */

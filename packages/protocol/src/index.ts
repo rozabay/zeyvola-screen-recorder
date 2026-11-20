@@ -38,9 +38,12 @@ export type CaptureConfig = z.infer<typeof CaptureConfig>;
 
 export type CapturePhase = 'idle' | 'preparing' | 'countdown' | 'recording' | 'paused' | 'finishing' | 'error';
 
+/** A native recording helper: one small program per OS that talks the line protocol of helper-client.ts. */
+export type NativeCaptureBackendId = 'native-macos' | 'native-windows' | 'native-linux';
+
 export interface CaptureState {
   phase: CapturePhase;
-  backend: 'native-macos' | 'native-windows' | 'web' | null;
+  backend: NativeCaptureBackendId | 'web' | null;
   elapsedMs: number;
   countdown: number;
   micLevel: number;
@@ -77,7 +80,7 @@ export interface SourceInfo {
 }
 
 export interface BackendInfo {
-  id: 'native-macos' | 'native-windows' | 'web';
+  id: NativeCaptureBackendId | 'web';
   available: boolean;
   reason?: string;
   capabilities: {

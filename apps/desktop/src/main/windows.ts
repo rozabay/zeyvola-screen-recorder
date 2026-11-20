@@ -78,9 +78,10 @@ export function showHud(displayBounds: Rect): BrowserWindow {
     secure(hud);
     hud.setAlwaysOnTop(true, 'screen-saver');
     hud.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // Windows: WDA_EXCLUDEFROMCAPTURE. macOS: ScreenCaptureKit ignores this; the native
-    // helper excludes our windows through its content filter instead.
-    hud.setContentProtection(true);
+    // Windows: WDA_EXCLUDEFROMCAPTURE. macOS: ScreenCaptureKit ignores this; the native helper
+    // excludes our windows through its content filter instead. Linux has no such switch on either
+    // recording path, so the HUD is simply hidden while the browser path records (capture/manager.ts).
+    if (process.platform !== 'linux') hud.setContentProtection(true);
     void hud.loadFile(join(RENDERER, 'hud.html'));
     hud.once('ready-to-show', () => hud?.showInactive());
   } else {

@@ -30,7 +30,8 @@
     "native:mac": "bash native/recorder-macos/build.sh",
     "native:input": "bash native/input-macos/build.sh",
     "native:audio": "bash native/audio-macos/build.sh",
-    "native:win": "bash native/helper-windows/build.sh"
+    "native:win": "bash native/helper-windows/build.sh",
+    "native:linux": "bash native/imlec-linux/build.sh && bash native/ses-linux/build.sh && bash native/kayit-linux/build.sh"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
