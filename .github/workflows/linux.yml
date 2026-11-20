@@ -83,7 +83,7 @@ jobs:
 
       # The WebM recorder test drives the real binary on a virtual display; the rest is pure.
       - name: Birim testleri ve kayıt testi / Unit and recording tests
-        run: xvfb-run -a pnpm test
+        run: xvfb-run -a -s "-screen 0 1280x800x24" pnpm test
 
       # A package, its licence/codec audit, and the .deb. --skip-build reuses the bundle the tests
       # just made; the audit is what the packaging step runs on its own.

@@ -5,7 +5,8 @@
 //   bash native/kayit-linux/build.sh
 //   pnpm vitest run apps/desktop/src/main/capture/kayit-linux.test.ts
 //
-// It records the screen of whatever DISPLAY points at (Xvfb in CI: `xvfb-run -a pnpm test`).
+// It records the screen of whatever DISPLAY points at (CI: `xvfb-run -a -s "-screen 0 1280x800x24"`).
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -18,6 +19,20 @@ import type { ProbedFile } from './helper-client';
 const HELPER = resolve(import.meta.dirname, '../../../../../native/kayit-linux/bin/zeyvola-kayit');
 const X11 = process.platform === 'linux' && existsSync(HELPER) && !!process.env.DISPLAY;
 
+// ximagesrc records the whole X screen, not the bounds we send. xvfb-run's default is
+// 1280x1024; a local Xvfb is often 1280x800. Read the live size so either one matches.
+function ekranOlcusu(): { genislik: number; yukseklik: number } {
+  const varsayilan = { genislik: 1280, yukseklik: 800 };
+  try {
+    const cikti = execFileSync('xdpyinfo', { encoding: 'utf8' });
+    const eslesen = cikti.match(/dimensions:\s+(\d+)x(\d+)/);
+    if (!eslesen) return varsayilan;
+    return { genislik: Number(eslesen[1]), yukseklik: Number(eslesen[2]) };
+  } catch {
+    return varsayilan;
+  }
+}
+
 const dirs: string[] = [];
 afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 
@@ -25,6 +40,7 @@ describe.skipIf(!X11)('Linux recording helper (zeyvola-kayit)', () => {
   it('records each source into its own file and logs what reconstruction needs', async () => {
     const outDir = mkdtempSync(join(tmpdir(), 'zeyvola-kayit-test-'));
     dirs.push(outDir);
+    const olcu = ekranOlcusu();
     const { spawn } = await import('node:child_process');
     const proc = spawn(HELPER, [], { stdio: ['pipe', 'pipe', 'pipe'] });
     const lines: Record<string, unknown>[] = [];
@@ -55,7 +71,7 @@ describe.skipIf(!X11)('Linux recording helper (zeyvola-kayit)', () => {
       display: 0,
       window: null,
       region: null,
-      bounds: { x: 0, y: 0, w: 1280, h: 800 },
+      bounds: { x: 0, y: 0, w: olcu.genislik, h: olcu.yukseklik },
       fps: 30,
       quality: 'high',
       camera: null,
@@ -65,7 +81,7 @@ describe.skipIf(!X11)('Linux recording helper (zeyvola-kayit)', () => {
       meta: {
         recordingId: 'rec_kayit0001',
         backend: 'native-linux',
-        target: { kind: 'display', label: 'Xvfb', bounds: { x: 0, y: 0, w: 1280, h: 800 }, scaleFactor: 1 },
+        target: { kind: 'display', label: 'Xvfb', bounds: { x: 0, y: 0, w: olcu.genislik, h: olcu.yukseklik }, scaleFactor: 1 },
       },
     })}\n`);
     expect(await wait('hello')).toMatchObject({ type: 'hello' });
@@ -89,8 +105,8 @@ describe.skipIf(!X11)('Linux recording helper (zeyvola-kayit)', () => {
     const probed: ProbedFile[] = await probeWebmFolder(outDir, (log?.tracks ?? []).map((t) => t.name));
     const screen = probed.find((p) => p.name === 'screen.webm');
     expect(screen?.error).toBeUndefined();
-    expect(screen?.width).toBe(1280);
-    expect(screen?.height).toBe(800);
+    expect(screen?.width).toBe(olcu.genislik);
+    expect(screen?.height).toBe(olcu.yukseklik);
 
     const files = (log?.tracks ?? []).map((t) => t.name).concat(['session.jsonl']);
     const rebuilt = rebuildRecording({ recordingId: 'rec_kayit0001', log: log!, probed, files, platform: 'linux-x64' });
