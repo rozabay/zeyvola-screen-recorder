@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <sub>Version 0.1.0 · macOS 13+ (Apple silicon and Intel) · Windows 10 / 11 (64-bit)</sub>
+  <sub>Version 0.1.0 · macOS 13+ (Apple silicon and Intel) · Windows 10 / 11 (64-bit) · Linux (64-bit, .deb)</sub>
 </p>
 
 | Computer | Download |
@@ -21,6 +21,7 @@
 | Mac with Apple silicon (M1, M2, M3, M4 …) | [**Zeyvola-0.1.0-macos-arm64.dmg**](https://github.com/YildizDikme/zeyvola-screen-recorder/releases/download/v0.1.0/Zeyvola-0.1.0-macos-arm64.dmg) |
 | Mac with an Intel processor | [**Zeyvola-0.1.0-macos-x64.dmg**](https://github.com/YildizDikme/zeyvola-screen-recorder/releases/download/v0.1.0/Zeyvola-0.1.0-macos-x64.dmg) |
 | Windows 10 / 11 (64-bit) | [**Zeyvola-0.1.0-windows-x64.zip**](https://github.com/YildizDikme/zeyvola-screen-recorder/releases/download/v0.1.0/Zeyvola-0.1.0-windows-x64.zip) |
+| Linux (Debian, Ubuntu, Pardus, 64-bit) | [**Zeyvola-0.1.0-linux-x64.deb**](https://github.com/rozabay/zeyvola-screen-recorder/releases/download/v0.1.0-linux/Zeyvola-0.1.0-linux-x64.deb) |
 
 Which Mac? Apple menu › **About This Mac**: "Chip: Apple M…" → Apple silicon, "Processor: … Intel …" → Intel. · *Hangi Mac? Apple menüsü › **Bu Mac Hakkında**: "Çip: Apple M…" → Apple Silicon, "İşlemci: … Intel …" → Intel.*
 
@@ -148,6 +149,8 @@ Recordings, cursor data and projects stay on your computer. Zeyvola makes no net
 ### Developer
 Zeyvola is developed by **Yıldız Dikme** (Independent Software Developer) · GitHub: [YildizDikme](https://github.com/YildizDikme). Copyright © 2026 Yıldız Dikme.
 
+Linux support was added by **Özkan SÜRÜCÜ**. Linux desteği Özkan SÜRÜCÜ tarafından eklenmiştir.
+
 ### License
 Zeyvola's source code is published under the **[PolyForm Shield License 1.0.0](LICENSE)**. It is a source-available license, not an open-source license in the OSI sense. The required notice lines are in [`NOTICE`](NOTICE).
 
@@ -212,8 +215,7 @@ Structure:
 
 <details><summary><b>Linux</b></summary>
 
-**Linux is built from source and packaged as a `.deb`** (Debian, Ubuntu, Pardus). There is no
-prebuilt download yet.
+**Linux is packaged as a `.deb`** (Debian, Ubuntu, Pardus, 64-bit). Download: [**Zeyvola-0.1.0-linux-x64.deb**](https://github.com/rozabay/zeyvola-screen-recorder/releases/download/v0.1.0-linux/Zeyvola-0.1.0-linux-x64.deb). Linux desteği Özkan SÜRÜCÜ tarafından eklenmiştir.
 
 ```bash
 sudo apt install libxi-dev libx11-dev libxext-dev libxfixes-dev \
@@ -381,6 +383,8 @@ Kayıtlar, imleç verileri ve projeler bilgisayarınızda kalır. Zeyvola ağ is
 ### Geliştirici
 Zeyvola'yı **Yıldız Dikme** (Independent Software Developer) geliştirir · GitHub: [YildizDikme](https://github.com/YildizDikme). Copyright © 2026 Yıldız Dikme.
 
+Linux desteği Özkan SÜRÜCÜ tarafından eklenmiştir.
+
 ### Lisans
 Zeyvola'nın kaynak kodu **[PolyForm Shield License 1.0.0](LICENSE)** ile yayımlanır. Bu lisans "kaynağı açık" (source-available) bir lisanstır; OSI anlamında açık kaynak değildir. Gerekli bildirim satırları [`NOTICE`](NOTICE) dosyasındadır.
 
@@ -449,8 +453,7 @@ Yapı:
 
 <details><summary><b>Linux</b></summary>
 
-**Linux kaynaktan derlenir ve `.deb` olarak paketlenir** (Debian, Ubuntu, Pardus). Hazır indirme
-henüz yok.
+**Linux `.deb` paketi olarak dağıtılır** (Debian, Ubuntu, Pardus, 64 bit). İndirme: [**Zeyvola-0.1.0-linux-x64.deb**](https://github.com/rozabay/zeyvola-screen-recorder/releases/download/v0.1.0-linux/Zeyvola-0.1.0-linux-x64.deb). Linux desteği Özkan SÜRÜCÜ tarafından eklenmiştir.
 
 ```bash
 sudo apt install libxi-dev libx11-dev libxext-dev libxfixes-dev \
